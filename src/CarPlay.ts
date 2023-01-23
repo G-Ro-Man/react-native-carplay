@@ -67,7 +67,7 @@ class CarPlayInterface {
 
     // check if already connected this will fire any 'didConnect' events
     // if a connected is already present.
-    this.bridge.checkForConnection();
+    this.bridge?.checkForConnection();
   }
 
   /**
@@ -98,7 +98,7 @@ class CarPlayInterface {
    * @param animated Set TRUE to animate the presentation of the root template; ignored if there isn't a current rootTemplate.
    */
   public setRootTemplate(rootTemplate: PushableTemplates | TabBarTemplate, animated = true) {
-    return this.bridge.setRootTemplate(rootTemplate.id, animated);
+    return this.bridge?.setRootTemplate(rootTemplate.id, animated);
   }
 
   /**
@@ -107,7 +107,7 @@ class CarPlayInterface {
    * @param animated Set TRUE to animate the presentation of the template.
    */
   public pushTemplate(templateToPush: PushableTemplates, animated = true) {
-    return this.bridge.pushTemplate(templateToPush.id, animated);
+    return this.bridge?.pushTemplate(templateToPush.id, animated);
   }
 
   /**
@@ -116,7 +116,7 @@ class CarPlayInterface {
    * @param animated A Boolean value that indicates whether the system animates the display of transitioning templates.
    */
   public popToTemplate(targetTemplate: PushableTemplates, animated = true) {
-    return this.bridge.popToTemplate(targetTemplate.id, animated);
+    return this.bridge?.popToTemplate(targetTemplate.id, animated);
   }
 
   /**
@@ -124,7 +124,7 @@ class CarPlayInterface {
    * @param animated A Boolean value that indicates whether the system animates the display of transitioning templates.
    */
   public popToRootTemplate(animated = true) {
-    return this.bridge.popToRootTemplate(animated);
+    return this.bridge?.popToRootTemplate(animated);
   }
 
   /**
@@ -132,7 +132,7 @@ class CarPlayInterface {
    * @param animated A Boolean value that indicates whether the system animates the display of transitioning templates.
    */
   public popTemplate(animated = true) {
-    return this.bridge.popTemplate(animated);
+    return this.bridge?.popTemplate(animated);
   }
 
   /**
@@ -141,7 +141,7 @@ class CarPlayInterface {
    * @param animated A Boolean value that indicates whether the system animates the display of transitioning templates.
    */
   public presentTemplate(templateToPresent: PresentableTemplates, animated = true) {
-    return this.bridge.presentTemplate(templateToPresent.id, animated);
+    return this.bridge?.presentTemplate(templateToPresent.id, animated);
   }
 
   /**
@@ -149,7 +149,7 @@ class CarPlayInterface {
    * * @param animated A Boolean value that indicates whether the system animates the display of transitioning templates.
    */
   public dismissTemplate(animated = true) {
-    return this.bridge.dismissTemplate(animated);
+    return this.bridge?.dismissTemplate(animated);
   }
 
   /**
@@ -173,7 +173,7 @@ class CarPlayInterface {
    * @param enable A Boolean value that indicates whether the system use now playing template.
    */
   public enableNowPlaying(enable = true) {
-    return this.bridge.enableNowPlaying(enable);
+    return this.bridge?.enableNowPlaying(enable);
   }
 }
 

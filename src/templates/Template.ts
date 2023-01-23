@@ -109,7 +109,7 @@ export class Template<P> {
     });
 
     if (this.type !== 'map') {
-      CarPlay.bridge.createTemplate(this.id, this.parseConfig({ type: this.type, ...config }));
+      CarPlay.bridge?.createTemplate(this.id, this.parseConfig({ type: this.type, ...config }));
     }
   }
 
