@@ -1,6 +1,7 @@
 #import "RNCarPlay.h"
 #import <React/RCTConvert.h>
 #import <React/RCTRootView.h>
+#import <MediaPlayer/MediaPlayer.h>
 
 @implementation RNCarPlay
 
@@ -140,7 +141,27 @@ RCT_EXPORT_METHOD(createTemplate:(NSString *)templateId config:(NSDictionary*)co
     }
     else if ([type isEqualToString:@"list"]) {
         NSArray *sections = [self parseSections:[RCTConvert NSArray:config[@"sections"]]];
-        CPListTemplate *listTemplate = [[CPListTemplate alloc] initWithTitle:title sections:sections];
+        CPListTemplate *listTemplate;
+        
+        if (config[@"assistant"]) {
+            CPAssistantCellPosition *position = config[@"assistant"][@"position"] == @"top" ? CPAssistantCellPositionTop : CPAssistantCellPositionBottom;
+            CPAssistantCellActionType *actionType = config[@"assistant"][@"actionType"] == @"playMedia" ? CPAssistantCellActionTypePlayMedia : CPAssistantCellActionTypeStartCall;
+            CPAssistantCellVisibility *visibility;
+            if ([config[@"assistant"][@"visibility"] isEqual: @"always"]) {
+                visibility = CPAssistantCellVisibilityAlways;
+            } else if ([config[@"assistant"][@"visibility"] isEqual: @"limited"]) {
+                visibility = CPAssistantCellVisibilityWhileLimitedUIActive;
+            } else {
+                visibility = CPAssistantCellVisibilityOff;
+            }
+            
+            CPAssistantCellConfiguration *cellConfig = [[CPAssistantCellConfiguration alloc] initWithPosition:position visibility:CPAssistantCellVisibilityAlways assistantAction:actionType];
+            
+            listTemplate = [[CPListTemplate alloc] initWithTitle:title sections:sections assistantCellConfiguration:cellConfig];
+        } else {
+            listTemplate = [[CPListTemplate alloc] initWithTitle:title sections:sections];
+        }
+        
         [listTemplate setLeadingNavigationBarButtons:leadingNavigationBarButtons];
         [listTemplate setTrailingNavigationBarButtons:trailingNavigationBarButtons];
         CPBarButton *backButton = [[CPBarButton alloc] initWithTitle:@" Back" handler:^(CPBarButton * _Nonnull barButton) {
@@ -554,5 +575,70 @@ RCT_EXPORT_METHOD(reactToSelectedResult:(BOOL)status) {
 - (void)nowPlayingTemplateAlbumArtistButtonTapped:(CPNowPlayingTemplate *)nowPlayingTemplate {
 
 }
+
+RCT_EXPORT_METHOD(checkMPNowPlayingInfoCenter) {
+    NSDictionary *nowPlayingInfo = [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo;
+    NSLog(@"Current Now Playing Info: %@", nowPlayingInfo);
+}
+
+RCT_EXPORT_METHOD(isSetMPNowPlayingInfoCenter:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+    NSDictionary *nowPlayingInfo = [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo;
+    if (nowPlayingInfo.count > 0) {
+//        NSError* error = nil;
+//        NSData* data = [NSJSONSerialization dataWithJSONObject:nowPlayingInfo options:NSJSONWritingPrettyPrinted error: &error];
+        resolve(@{@"info": @(nowPlayingInfo.count)});
+    } else {
+        NSError *error = [[NSError alloc] init];
+        reject(@"not_set", @"Now Playing info not set yet", error);
+    }
+}
+
+RCT_EXPORT_METHOD(updateNowPlayingInfo:(NSDictionary *)info) {
+    MPNowPlayingInfoCenter *nowPlayingInfoCenter = [MPNowPlayingInfoCenter defaultCenter];
+
+    NSMutableDictionary *nowPlayingInfo = [nowPlayingInfoCenter.nowPlayingInfo mutableCopy];
+    if (info[@"title"]) {
+        [nowPlayingInfo setObject:info[@"title"] forKey:MPMediaItemPropertyTitle];
+    }
+    if (info[@"artist"]) {
+        [nowPlayingInfo setObject:info[@"artist"] forKey:MPMediaItemPropertyArtist];
+    }
+    if (info[@"album"]) {
+        [nowPlayingInfo setObject:info[@"album"] forKey:MPMediaItemPropertyAlbumTitle];
+    }
+    if (info[@"progress"]) {
+        [nowPlayingInfo setObject:[NSNumber numberWithDouble:[info[@"progress"] doubleValue]] forKey:MPNowPlayingInfoPropertyElapsedPlaybackTime];
+    }
+    if (info[@"duration"]) {
+        [nowPlayingInfo setObject:[NSNumber numberWithDouble:[info[@"duration"] doubleValue]] forKey:MPMediaItemPropertyPlaybackDuration];
+    }
+    if (info[@"rate"]) {
+        [nowPlayingInfo setObject:[NSNumber numberWithDouble:[info[@"rate"] doubleValue]] forKey:MPNowPlayingInfoPropertyPlaybackRate];
+        [nowPlayingInfo setObject:[NSNumber numberWithDouble:[info[@"rate"] doubleValue]] forKey:MPNowPlayingInfoPropertyDefaultPlaybackRate];
+    }
+    if (info[@"type"]) {
+        [nowPlayingInfo setObject:[NSNumber numberWithInt:[info[@"type"] intValue]] forKey:MPNowPlayingInfoPropertyMediaType];
+    }
+    if (info[@"image"]) {
+        // Load the cover image asynchronously
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            NSData *coverImageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:info[@"image"]]];
+            UIImage *coverImage = [UIImage imageWithData:coverImageData];
+
+            MPMediaItemArtwork *artwork = [[MPMediaItemArtwork alloc] initWithImage:coverImage];
+            [nowPlayingInfo setObject:artwork forKey:MPMediaItemPropertyArtwork];
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo;
+            });
+        });
+    } else {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo;
+        });
+    }
+}
+
 
 @end
