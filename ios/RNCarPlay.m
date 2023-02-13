@@ -2,6 +2,7 @@
 #import <React/RCTConvert.h>
 #import <React/RCTRootView.h>
 #import <MediaPlayer/MediaPlayer.h>
+#import <Intents/Intents.h>
 
 @implementation RNCarPlay
 
@@ -62,6 +63,9 @@ RCT_EXPORT_MODULE();
         @"actionButtonPressed",
         // list
         @"didSelectListItem",
+        @"didSelectListItemImage",
+        // nowplaying
+        @"nowPlayingButtonPressed",
         // search
         @"updatedSearchText",
         @"searchButtonPressed",
@@ -140,12 +144,12 @@ RCT_EXPORT_METHOD(createTemplate:(NSString *)templateId config:(NSDictionary*)co
         template = gridTemplate;
     }
     else if ([type isEqualToString:@"list"]) {
-        NSArray *sections = [self parseSections:[RCTConvert NSArray:config[@"sections"]]];
         CPListTemplate *listTemplate;
+        NSArray *sections = [self parseSections:[RCTConvert NSArray:config[@"sections"]] templateId:templateId];
         
         if (config[@"assistant"]) {
-            CPAssistantCellPosition *position = config[@"assistant"][@"position"] == @"top" ? CPAssistantCellPositionTop : CPAssistantCellPositionBottom;
-            CPAssistantCellActionType *actionType = config[@"assistant"][@"actionType"] == @"playMedia" ? CPAssistantCellActionTypePlayMedia : CPAssistantCellActionTypeStartCall;
+            CPAssistantCellPosition *position = [config[@"assistant"][@"position"] isEqual: @"bottom"] ? CPAssistantCellPositionBottom : CPAssistantCellPositionTop;
+            CPAssistantCellActionType *actionType = [config[@"assistant"][@"actionType"] isEqual: @"startCall"] ? CPAssistantCellActionTypeStartCall : CPAssistantCellActionTypePlayMedia;
             CPAssistantCellVisibility *visibility;
             if ([config[@"assistant"][@"visibility"] isEqual: @"always"]) {
                 visibility = CPAssistantCellVisibilityAlways;
@@ -183,6 +187,12 @@ RCT_EXPORT_METHOD(createTemplate:(NSString *)templateId config:(NSDictionary*)co
         [nowPlayingTemplate setAlbumArtistButtonEnabled:[RCTConvert BOOL:config[@"albumArtistButton"]]];
         [nowPlayingTemplate setUpNextTitle:[RCTConvert NSString:config[@"upNextTitle"]]];
         [nowPlayingTemplate setUpNextButtonEnabled:[RCTConvert BOOL:config[@"upNextButton"]]];
+        
+        NSArray *buttons = [self parseNowPlayingButtons:config[@"buttons"] templateId:templateId];
+        if ([buttons count] > 0) {
+            [nowPlayingTemplate updateNowPlayingButtons:buttons];
+        }
+        
         template = nowPlayingTemplate;
     } else if ([type isEqualToString:@"tabbar"]) {
         CPTabBarTemplate *tabBarTemplate = [[CPTabBarTemplate alloc] initWithTemplates:[self parseTemplatesFrom:config]];
@@ -333,7 +343,7 @@ RCT_EXPORT_METHOD(updateListTemplateSections:(NSString *)templateId sections:(NS
     CPTemplate *template = [store findTemplateById:templateId];
     if (template) {
         CPListTemplate *listTemplate = (CPListTemplate*) template;
-        [listTemplate updateSections:[self parseSections:sections]];
+        [listTemplate updateSections:[self parseSections:sections templateId:templateId]];
     } else {
         NSLog(@"Failed to find template %@", template);
     }
@@ -344,20 +354,43 @@ RCT_EXPORT_METHOD(updateListTemplateItem:(NSString *)templateId config:(NSDictio
     CPTemplate *template = [store findTemplateById:templateId];
     if (template) {
         CPListTemplate *listTemplate = (CPListTemplate*) template;
-        NSInteger sectionIndex = [RCTConvert NSInteger:config[@"sectionIndex"]];
+        
+        NSInteger index = [RCTConvert NSInteger:config[@"itemIndex"]];
+        __block NSInteger lastCount = 0;
+        __block NSInteger sectionIndex;
+        
+        if (config[@"sectionIndex"]) {
+            sectionIndex = [RCTConvert NSInteger:config[@"sectionIndex"]];
+        } else {
+            [listTemplate.sections enumerateObjectsUsingBlock:^(CPListSection * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                lastCount += obj.items.count;
+                if (lastCount > index) {
+                    sectionIndex = idx;
+                    *stop = YES;
+                }
+            }];
+        }
+        
         if (sectionIndex >= listTemplate.sections.count) {
             NSLog(@"Failed to update item at section %d, sections size is %d", index, listTemplate.sections.count);
             return;
         }
+        
         CPListSection *section = listTemplate.sections[sectionIndex];
-        NSInteger index = [RCTConvert NSInteger:config[@"itemIndex"]];
-        if (index >= section.items.count) {
-            NSLog(@"Failed to update item at index %d, section size is %d", index, section.items.count);
+        NSInteger itemIndex = index - (lastCount - section.items.count);
+        if (itemIndex >= section.items.count) {
+            NSLog(@"Failed to update item at index %d, section size is %d", itemIndex, section.items.count);
             return;
         }
-        CPListItem *item = (CPListItem *)section.items[index];
+        
+        CPListItem *item = (CPListItem *)section.items[itemIndex];
         if (config[@"imgUrl"]) {
             [item setImage:[[UIImage alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:config[@"imgUrl"]]]]]];
+//            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+//                NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:config[@"imgUrl"]]]];
+//                UIImage *image = [UIImage imageWithData:imageData];
+//                [item setImage:image];
+//            });
         }
         if (config[@"image"]) {
             [item setImage:[RCTConvert UIImage:config[@"image"]]];
@@ -370,6 +403,9 @@ RCT_EXPORT_METHOD(updateListTemplateItem:(NSString *)templateId config:(NSDictio
         }
         if (config[@"isPlaying"]) {
             [item setPlaying:[RCTConvert BOOL:config[@"isPlaying"]]];
+        }
+        if (config[@"playbackProgress"]) {
+            [item setPlaybackProgress:[config[@"playbackProgress"] doubleValue]];
         }
     } else {
         NSLog(@"Failed to find template %@", template);
@@ -384,8 +420,8 @@ RCT_EXPORT_METHOD(enableNowPlaying:(BOOL)enable) {
     }
 }
 
-RCT_EXPORT_METHOD(reactToUpdatedSearchText:(NSArray *)items) {
-    NSArray *sectionsItems = [self parseListItems:items startIndex:0];
+RCT_EXPORT_METHOD(reactToUpdatedSearchText:(NSArray *)items templateId:(NSString*)templateId) {
+    NSArray *sectionsItems = [self parseListItems:items startIndex:0 templateId:templateId];
 
     if (self.searchResultBlock) {
         self.searchResultBlock(sectionsItems);
@@ -461,14 +497,14 @@ RCT_EXPORT_METHOD(reactToSelectedResult:(BOOL)status) {
     return result;
 }
 
-- (NSArray<CPListSection*>*)parseSections:(NSArray*)sections {
+- (NSArray<CPListSection*>*)parseSections:(NSArray*)sections templateId:(NSString*)templateId {
     NSMutableArray *result = [NSMutableArray array];
     int index = 0;
     for (NSDictionary *section in sections) {
         NSArray *items = [section objectForKey:@"items"];
         NSString *_sectionIndexTitle = [section objectForKey:@"sectionIndexTitle"];
         NSString *_header = [section objectForKey:@"header"];
-        NSArray *_items = [self parseListItems:items startIndex:index];
+        NSArray *_items = [self parseListItems:items startIndex:index templateId:templateId];
         CPListSection *_section = [[CPListSection alloc] initWithItems:_items header:_header sectionIndexTitle:_sectionIndexTitle];
         [result addObject:_section];
         int count = (int) [items count];
@@ -477,24 +513,50 @@ RCT_EXPORT_METHOD(reactToSelectedResult:(BOOL)status) {
     return result;
 }
 
-- (NSArray<CPListItem*>*)parseListItems:(NSArray*)items startIndex:(int)startIndex {
+- (NSArray<CPListItem*>*)parseListItems:(NSArray*)items startIndex:(int)startIndex templateId:(NSString*)templateId {
     NSMutableArray *_items = [NSMutableArray array];
     int index = startIndex;
     for (NSDictionary *item in items) {
-        BOOL _showsDisclosureIndicator = [item objectForKey:@"showsDisclosureIndicator"];
-        NSString *_detailText = [item objectForKey:@"detailText"];
-        NSString *_text = [item objectForKey:@"text"];
-        UIImage *_image = [RCTConvert UIImage:[item objectForKey:@"image"]];
-        if (item[@"imgUrl"]) {
-            _image = [[UIImage alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:item[@"imgUrl"]]]]];
+        if ([RCTConvert BOOL:[item objectForKey:@"imgRow"]]) {
+            NSMutableArray<UIImage *> *_images = [NSMutableArray array];
+            NSArray<NSString*> *_imgsUrls = [item objectForKey:@"imgUrls"];
+            for (NSString *imgUrl in _imgsUrls) {
+                UIImage *_image = [[UIImage alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:imgUrl]]];
+                [_images addObject:_image];
+            }
+            NSString *_text = [item objectForKey:@"text"];
+            CPListImageRowItem *_item = [[CPListImageRowItem alloc] initWithText:_text images:_images];
+//            double maxSize = CPListImageRowItem.maximumImageSize.width - CPMaximumNumberOfGridImages;
+            [_item setUserInfo:@{ @"index": @(index) }];
+            __weak CPListImageRowItem *_weakItem = _item;
+            [_item setListImageRowHandler:^(CPListImageRowItem * _Nonnull item, NSInteger index, dispatch_block_t  _Nonnull completionBlock) {
+                [self sendEventWithName:@"didSelectListItemImage" body:@{@"templateId":templateId, @"index": @(index), @"itemIndex": [_weakItem.userInfo objectForKey:@"index"] }];
+            }];
+            [_items addObject:_item];
+            index = index + 1;
+        } else {
+            BOOL _showsDisclosureIndicator = [item objectForKey:@"showsDisclosureIndicator"];
+            NSString *_detailText = [item objectForKey:@"detailText"];
+            NSString *_text = [item objectForKey:@"text"];
+            __block UIImage *_image = [RCTConvert UIImage:[item objectForKey:@"image"]];
+            if (item[@"imgUrl"]) {
+                _image = [[UIImage alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:item[@"imgUrl"]]]]];
+//                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+//                    NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:item[@"imgUrl"]]]];
+//                    _image = [UIImage imageWithData:imageData];
+//                });
+            }
+            CPListItem *_item = [[CPListItem alloc] initWithText:_text detailText:_detailText image:_image showsDisclosureIndicator:_showsDisclosureIndicator];
+            if ([item objectForKey:@"isPlaying"]) {
+                [_item setPlaying:[RCTConvert BOOL:[item objectForKey:@"isPlaying"]]];
+            }
+            if ([item objectForKey:@"playbackProgress"]) {
+                [_item setPlaybackProgress:[[item objectForKey:@"playbackProgress"] doubleValue]];
+            }
+            [_item setUserInfo:@{ @"index": @(index) }];
+            [_items addObject:_item];
+            index = index + 1;
         }
-        CPListItem *_item = [[CPListItem alloc] initWithText:_text detailText:_detailText image:_image showsDisclosureIndicator:_showsDisclosureIndicator];
-        if ([item objectForKey:@"isPlaying"]) {
-            [_item setPlaying:[RCTConvert BOOL:[item objectForKey:@"isPlaying"]]];
-        }
-        [_item setUserInfo:@{ @"index": @(index) }];
-        [_items addObject:_item];
-        index = index + 1;
     }
     return _items;
 }
@@ -513,6 +575,39 @@ RCT_EXPORT_METHOD(reactToSelectedResult:(BOOL)status) {
         [_button setEnabled:!_disabled];
         [result addObject:_button];
         index = index + 1;
+    }
+    return result;
+}
+
+- (NSArray<CPNowPlayingButton*>*)parseNowPlayingButtons:(NSArray*)buttons templateId:(NSString*)templateId {
+    NSMutableArray *result = [NSMutableArray array];
+    for (NSDictionary *button in buttons) {
+        CPNowPlayingButton *_button;
+        
+        NSString *_id = [button objectForKey:@"id"];
+        NSString *_type = [button objectForKey:@"type"];
+        if ([_type isEqual:@"rate"]) {
+            CPNowPlayingPlaybackRateButton *rate = [[CPNowPlayingPlaybackRateButton alloc] initWithHandler:^(__kindof CPNowPlayingButton * _Nonnull button) {
+                [self sendEventWithName:@"nowPlayingButtonPressed" body:@{@"id": _id, @"templateId":templateId, @"action": @"rate" }];
+            }];
+            _button = rate;
+        }
+        else if ([_type isEqual:@"add"]) {
+            CPNowPlayingAddToLibraryButton *addToLib = [[CPNowPlayingAddToLibraryButton alloc] initWithHandler:^(__kindof CPNowPlayingButton * _Nonnull button) {
+                [self sendEventWithName:@"nowPlayingButtonPressed" body:@{@"id": _id, @"templateId":templateId, @"action": @"add" }];
+            }];
+            _button = addToLib;
+        }
+        else if ([_type isEqual:@"repeat"]) {
+            CPNowPlayingAddToLibraryButton *repeat = [[CPNowPlayingRepeatButton alloc] initWithHandler:^(__kindof CPNowPlayingButton * _Nonnull button) {
+                [self sendEventWithName:@"nowPlayingButtonPressed" body:@{@"id": _id, @"templateId":templateId, @"action": @"repeat" }];
+            }];
+            _button = repeat;
+        }
+        
+        BOOL _disabled = [button objectForKey:@"disabled"];
+        [_button setEnabled:!_disabled];
+        [result addObject:_button];
     }
     return result;
 }
@@ -538,7 +633,8 @@ RCT_EXPORT_METHOD(reactToSelectedResult:(BOOL)status) {
 
 - (void)listTemplate:(CPListTemplate *)listTemplate didSelectListItem:(CPListItem *)item completionHandler:(void (^)(void))completionHandler {
     NSNumber* index = [item.userInfo objectForKey:@"index"];
-    [self sendTemplateEventWithName:listTemplate name:@"didSelectListItem" json:@{ @"index": index }];
+//    NSNumber* sectionIndex = [item.userInfo objectForKey:@"sectionIndex"];
+    [self sendTemplateEventWithName:listTemplate name:@"didSelectListItem" json:@{ @"index": index }]; //@"sectionIndex": sectionIndex
     self.selectedResultBlock = completionHandler;
 }
 
@@ -581,16 +677,26 @@ RCT_EXPORT_METHOD(checkMPNowPlayingInfoCenter) {
     NSLog(@"Current Now Playing Info: %@", nowPlayingInfo);
 }
 
+RCT_EXPORT_METHOD(setAllIsPlayingFalse:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+    RNCPStore * store = [RNCPStore sharedManager];
+    [store setAllIsPlayingFalse:^{
+        resolve(@{});
+    }];
+}
+
 RCT_EXPORT_METHOD(isSetMPNowPlayingInfoCenter:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
     NSDictionary *nowPlayingInfo = [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo;
-    if (nowPlayingInfo.count > 0) {
+//    resolve(@{@"info": @(nowPlayingInfo.count)});
+    if (nowPlayingInfo != nil && nowPlayingInfo.count > 0) {
 //        NSError* error = nil;
 //        NSData* data = [NSJSONSerialization dataWithJSONObject:nowPlayingInfo options:NSJSONWritingPrettyPrinted error: &error];
-        resolve(@{@"info": @(nowPlayingInfo.count)});
+        resolve(@{@"info": @(nowPlayingInfo.count), @"title": [nowPlayingInfo objectForKey:@"title"]});
     } else {
-        NSError *error = [[NSError alloc] init];
-        reject(@"not_set", @"Now Playing info not set yet", error);
+//        NSError *error = [[NSError alloc] init];
+//        reject(@"not_set", @"Now Playing info not set yet", error);
+        resolve(@{});
     }
 }
 
@@ -628,7 +734,7 @@ RCT_EXPORT_METHOD(updateNowPlayingInfo:(NSDictionary *)info) {
 
             MPMediaItemArtwork *artwork = [[MPMediaItemArtwork alloc] initWithImage:coverImage];
             [nowPlayingInfo setObject:artwork forKey:MPMediaItemPropertyArtwork];
-
+            
             dispatch_async(dispatch_get_main_queue(), ^{
                 nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo;
             });
@@ -640,5 +746,34 @@ RCT_EXPORT_METHOD(updateNowPlayingInfo:(NSDictionary *)info) {
     }
 }
 
+# pragma Siri Intents
+
+// Request Siri authorization
+RCT_EXPORT_METHOD(requestSiriAuthorization:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+    [INPreferences requestSiriAuthorization:^(INSiriAuthorizationStatus status) {
+        switch (status) {
+            case INSiriAuthorizationStatusAuthorized:
+                // Siri authorization was successful
+                resolve(@"authorized");
+                break;
+                
+            case INSiriAuthorizationStatusDenied:
+                // Siri authorization was denied by the user
+                resolve(@"denied");
+                break;
+                
+            case INSiriAuthorizationStatusRestricted:
+                // Siri authorization is restricted on this device
+                resolve(@"restricted");
+                break;
+                
+            default: {
+                NSError *error = [[NSError alloc] init];
+                reject(@"unknown", @"No Status", error);
+                break;
+            }
+        }
+    }];
+}
 
 @end

@@ -47,4 +47,23 @@
     return templateId;
 }
 
+- (void) setAllIsPlayingFalse:(void (^)(void))completion {
+    for (id key in _templatesStore) {
+        id template = _templatesStore[key];
+        if ([template isKindOfClass:[CPListTemplate class]]) {
+            CPListTemplate *listTemplate = (CPListTemplate *)template;
+            for (CPListSection *section in listTemplate.sections) {
+                for (CPListItem *item in section.items) {
+                    if (item.isPlaying) {
+                        [item setPlaying:NO];
+                        completion();
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    completion();
+}
+
 @end

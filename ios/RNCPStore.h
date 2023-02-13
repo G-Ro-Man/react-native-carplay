@@ -14,5 +14,6 @@
 - (NSString*) setTemplate:(NSString*)templateId template:(CPTemplate*)temp;
 - (Boolean) isConnected;
 - (void) setConnected:(Boolean) isConnected;
+- (void) setAllIsPlayingFalse:(void (^)(void))completion;
 
 @end
