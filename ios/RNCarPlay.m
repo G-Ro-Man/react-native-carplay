@@ -3,6 +3,7 @@
 #import <React/RCTRootView.h>
 #import <MediaPlayer/MediaPlayer.h>
 #import <Intents/Intents.h>
+#import <SDWebImage/SDWebImage.h>
 
 @implementation RNCarPlay
 
@@ -94,11 +95,10 @@ RCT_EXPORT_MODULE();
     ];
 }
 
-- (dispatch_queue_t)methodQueue
-{
-    return dispatch_get_main_queue();
-}
-
+//- (dispatch_queue_t)methodQueue
+//{
+//    return dispatch_get_main_queue();
+//}
 
 -(UIImage *)imageWithTint:(UIImage *)image andTintColor:(UIColor *)tintColor {
     UIImage *imageNew = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
@@ -303,6 +303,13 @@ RCT_EXPORT_METHOD(dismissTemplate:(BOOL)animated) {
     [store.interfaceController dismissTemplateAnimated:animated];
 }
 
+RCT_EXPORT_METHOD(updateNowPlayingButtons:(NSArray*)buttons templateId:(NSString*)templateId) {
+    NSArray *_buttons = [self parseNowPlayingButtons:buttons templateId:templateId];
+    if ([_buttons count] > 0) {
+        [CPNowPlayingTemplate.sharedTemplate updateNowPlayingButtons:_buttons];
+    }
+}
+
 RCT_EXPORT_METHOD(updateListTemplate:(NSString*)templateId config:(NSDictionary*)config) {
     RNCPStore *store = [RNCPStore sharedManager];
     CPTemplate *template = [store findTemplateById:templateId];
@@ -385,12 +392,7 @@ RCT_EXPORT_METHOD(updateListTemplateItem:(NSString *)templateId config:(NSDictio
         
         CPListItem *item = (CPListItem *)section.items[itemIndex];
         if (config[@"imgUrl"]) {
-            [item setImage:[[UIImage alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:config[@"imgUrl"]]]]]];
-//            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-//                NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:config[@"imgUrl"]]]];
-//                UIImage *image = [UIImage imageWithData:imageData];
-//                [item setImage:image];
-//            });
+            [item setImage:[UIImage sd_imageWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:config[@"imgUrl"]]]]]];
         }
         if (config[@"image"]) {
             [item setImage:[RCTConvert UIImage:config[@"image"]]];
@@ -521,7 +523,7 @@ RCT_EXPORT_METHOD(reactToSelectedResult:(BOOL)status) {
             NSMutableArray<UIImage *> *_images = [NSMutableArray array];
             NSArray<NSString*> *_imgsUrls = [item objectForKey:@"imgUrls"];
             for (NSString *imgUrl in _imgsUrls) {
-                UIImage *_image = [[UIImage alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:imgUrl]]];
+                UIImage *_image = [UIImage sd_imageWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:imgUrl]]];
                 [_images addObject:_image];
             }
             NSString *_text = [item objectForKey:@"text"];
@@ -540,11 +542,7 @@ RCT_EXPORT_METHOD(reactToSelectedResult:(BOOL)status) {
             NSString *_text = [item objectForKey:@"text"];
             __block UIImage *_image = [RCTConvert UIImage:[item objectForKey:@"image"]];
             if (item[@"imgUrl"]) {
-                _image = [[UIImage alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:item[@"imgUrl"]]]]];
-//                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-//                    NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:item[@"imgUrl"]]]];
-//                    _image = [UIImage imageWithData:imageData];
-//                });
+                _image = [UIImage sd_imageWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[RCTConvert NSString:item[@"imgUrl"]]]]];
             }
             CPListItem *_item = [[CPListItem alloc] initWithText:_text detailText:_detailText image:_image showsDisclosureIndicator:_showsDisclosureIndicator];
             if ([item objectForKey:@"isPlaying"]) {
@@ -585,24 +583,38 @@ RCT_EXPORT_METHOD(reactToSelectedResult:(BOOL)status) {
         CPNowPlayingButton *_button;
         
         NSString *_id = [button objectForKey:@"id"];
+        if (!_id) {
+            _id = @"none";
+        }
+        
         NSString *_type = [button objectForKey:@"type"];
         if ([_type isEqual:@"rate"]) {
-            CPNowPlayingPlaybackRateButton *rate = [[CPNowPlayingPlaybackRateButton alloc] initWithHandler:^(__kindof CPNowPlayingButton * _Nonnull button) {
+            CPNowPlayingPlaybackRateButton *rate = [[CPNowPlayingPlaybackRateButton alloc] initWithHandler:^(CPNowPlayingPlaybackRateButton * _Nonnull button) {
                 [self sendEventWithName:@"nowPlayingButtonPressed" body:@{@"id": _id, @"templateId":templateId, @"action": @"rate" }];
             }];
             _button = rate;
         }
         else if ([_type isEqual:@"add"]) {
-            CPNowPlayingAddToLibraryButton *addToLib = [[CPNowPlayingAddToLibraryButton alloc] initWithHandler:^(__kindof CPNowPlayingButton * _Nonnull button) {
+            CPNowPlayingAddToLibraryButton *addToLib = [[CPNowPlayingAddToLibraryButton alloc] initWithHandler:^(CPNowPlayingAddToLibraryButton * _Nonnull button) {
                 [self sendEventWithName:@"nowPlayingButtonPressed" body:@{@"id": _id, @"templateId":templateId, @"action": @"add" }];
             }];
             _button = addToLib;
         }
         else if ([_type isEqual:@"repeat"]) {
-            CPNowPlayingAddToLibraryButton *repeat = [[CPNowPlayingRepeatButton alloc] initWithHandler:^(__kindof CPNowPlayingButton * _Nonnull button) {
+            CPNowPlayingRepeatButton *repeat = [[CPNowPlayingRepeatButton alloc] initWithHandler:^(CPNowPlayingRepeatButton * _Nonnull button) {
                 [self sendEventWithName:@"nowPlayingButtonPressed" body:@{@"id": _id, @"templateId":templateId, @"action": @"repeat" }];
             }];
             _button = repeat;
+        }
+        else if (([button objectForKey:@"image"] || [button objectForKey:@"imgUrl"]) && _type != nil) {
+            UIImage *_image = [RCTConvert UIImage:[button objectForKey:@"image"]];
+            if ([button objectForKey:@"imgUrl"]) {
+                _image = [UIImage sd_imageWithData: [NSData dataWithContentsOfURL: [NSURL URLWithString:[RCTConvert NSString:[button objectForKey:@"imgUrl"]]]]];
+            }
+            CPNowPlayingImageButton *custom = [[CPNowPlayingImageButton alloc] initWithImage:_image handler:^(CPNowPlayingImageButton * _Nonnull button) {
+                [self sendEventWithName:@"nowPlayingButtonPressed" body:@{@"id": _id, @"templateId":templateId, @"action": _type }];
+            }];
+            _button = custom;
         }
         
         BOOL _disabled = [button objectForKey:@"disabled"];
