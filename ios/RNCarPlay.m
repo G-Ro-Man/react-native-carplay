@@ -611,10 +611,13 @@ RCT_EXPORT_METHOD(reactToSelectedResult:(BOOL)status) {
             if ([button objectForKey:@"imgUrl"]) {
                 _image = [UIImage sd_imageWithData: [NSData dataWithContentsOfURL: [NSURL URLWithString:[RCTConvert NSString:[button objectForKey:@"imgUrl"]]]]];
             }
-            CPNowPlayingImageButton *custom = [[CPNowPlayingImageButton alloc] initWithImage:_image handler:^(CPNowPlayingImageButton * _Nonnull button) {
-                [self sendEventWithName:@"nowPlayingButtonPressed" body:@{@"id": _id, @"templateId":templateId, @"action": _type }];
-            }];
-            _button = custom;
+            
+            if (_image != nil) {
+                CPNowPlayingImageButton *custom = [[CPNowPlayingImageButton alloc] initWithImage:_image handler:^(CPNowPlayingImageButton * _Nonnull button) {
+                    [self sendEventWithName:@"nowPlayingButtonPressed" body:@{@"id": _id, @"templateId":templateId, @"action": _type }];
+                }];
+                _button = custom;
+            }
         }
         
         BOOL _disabled = [button objectForKey:@"disabled"];
