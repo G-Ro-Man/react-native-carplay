@@ -40,7 +40,13 @@ export interface ListTemplateConfig extends TemplateConfig {
    * @param item Object with the selected index
    */
   onItemSelect?(item: { index: number }): Promise<void>;
-
+  /**
+   * Fired when image list item is selected.
+   * Spinner shows by default.
+   * When the returned promise is resolved the spinner will hide.
+   * @param item Object with the selected index
+   */
+  onImageItemSelect?(item: { index: number,  itemIndex: number }): Promise<void>;
   /**
    * Fired when the back button is pressed
    */
@@ -73,6 +79,13 @@ export class ListTemplate extends Template<ListTemplateConfig> {
     CarPlay.emitter.addListener('didSelectListItem', e => {
       if (config.onItemSelect && e.templateId === this.id) {
         const x = config.onItemSelect(e);
+        Promise.resolve(x).then(() => CarPlay.bridge.reactToSelectedResult(true));
+      }
+    });
+    CarPlay.emitter.addListener('didSelectListItemImage', e => {
+      console.log(e)
+      if (config.onImageItemSelect && e.templateId === this.id) {
+        const x = config.onImageItemSelect(e);
         Promise.resolve(x).then(() => CarPlay.bridge.reactToSelectedResult(true));
       }
     });
