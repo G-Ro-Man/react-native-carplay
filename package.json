@@ -19,7 +19,10 @@
     "build:dev": "tsc && cp -r lib example/node_modules/react-native-carplay",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": "git+https://github.com/G-Ro-Man/react-native-carplay.git",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/G-Ro-Man/react-native-carplay.git"
+  },
   "keywords": [
     "react",
     "native",
