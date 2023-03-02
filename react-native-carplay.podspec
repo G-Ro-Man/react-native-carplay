@@ -7,13 +7,13 @@ Pod::Spec.new do |s|
   s.version      = package['version']
   s.summary      = package['description']
 
-  s.homepage     = package['repository']['url']
+  s.homepage     = package['homepage']
 
   s.license      = package['license']
   s.authors      = package['author']
   s.ios.deployment_target = '12.0'
 
-  s.source       = { :git => "https://github.com/birkir/react-native-carplay.git" }
+  s.source       = { :git => "https://github.com/G-Ro-Man/react-native-carplay.git", :tag => package['version'] }
 
   s.source_files  = "ios/*.{h,m}"
 

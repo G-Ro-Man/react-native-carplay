@@ -1,6 +1,6 @@
 {
   "name": "rn-carplay",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "CarPlay for React Native",
   "main": "lib/index.js",
   "files": [
@@ -19,10 +19,7 @@
     "build:dev": "tsc && cp -r lib example/node_modules/react-native-carplay",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/G-Ro-Man/react-native-carplay.git"
-  },
+  "repository": "git+https://github.com/G-Ro-Man/react-native-carplay.git",
   "keywords": [
     "react",
     "native",
